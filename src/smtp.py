@@ -4,20 +4,20 @@ from src.config import smtp_config
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
-
+import re
 
 class EmailSender:
 
+    HTML_TEMPLATE = ''
+
     def __init__(self) -> None:
-        self.read_templates()
+        self.set_html_template()
 
-
-    def read_templates(self):
-        self.info_template = ''
+    def set_html_template(self):
+        self.HTML_TEMPLATE = ''
         info_template_url = Path('src/html_templates/info_message.html', strict=True).resolve()
         with open(info_template_url) as r:
-            self.info_template += r.read()
-        print(self.info_template)
+            self.HTML_TEMPLATE += r.read()
 
     @classmethod
     def form_header(cls, to: str, subject: str = 'API Message') -> MIMEMultipart:
@@ -27,9 +27,15 @@ class EmailSender:
         msg['Subject'] = subject
         return msg
 
-    def send_email(self, to: str, subject: 'str'):
+    def preprocess_html(self, insert_data):
+        data = ''
+        for d in insert_data:
+            data += f'<p>{d}</p>'
+        return re.sub('<% insertPosition %>', data, self.HTML_TEMPLATE)
+
+    def send_email(self, to: str, subject: 'str', data_content):
         msg = self.form_header(to, subject)
-        html = MIMEText(self.info_template, 'html')
+        html = MIMEText(self.preprocess_html(data_content), 'html')
         msg.attach(html)
         try:
             mailserver = smtplib.SMTP('smtp.yandex.ru',587)
@@ -43,7 +49,7 @@ class EmailSender:
             # Повторно идентифицируем себя как зашифрованное соединение перед аутентификацией.
             mailserver.ehlo()
             mailserver.login(smtp_config.login, smtp_config.password)
-            mailserver.sendmail(smtp_config.login,'playervoker@gmail.com',msg.as_string())
+            mailserver.send_message(msg, smtp_config.login, to)
             mailserver.quit()
             print("Письмо успешно отправлено")
         except smtplib.SMTPException as e:
